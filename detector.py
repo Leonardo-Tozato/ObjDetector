@@ -12,8 +12,8 @@ classes = ["background", "aeroplane", "bicycle", "bird", "boat",
     "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
     "sofa", "train", "tvmonitor"]
 colors = np.random.uniform(0, 255, size=(len(classes), 3))
-socket_num = 3001
-arduin_com = serial.Serial('/dev/ttyACM0', 9600)
+socket_num = 3000
+#arduin_com = serial.Serial('/dev/ttyACM0', 9600)
 
 def predict(image, net):
     (h, w) = image.shape[:2]
@@ -36,7 +36,7 @@ def predict(image, net):
 
 def capture_predict():
     print("[INFO] loading model...")
-    net = cv2.dnn.readNetFromCaffe('MobileNetSSD_deploy.prototxt.txt', 'MobileNetSSD_deploy.caffemodel')
+    net = cv2.dnn.readNetFromCaffe('MobileNetSSD_deploy.prototxt', 'MobileNetSSD_deploy.caffemodel')
     os.system("fswebcam -r 299x299 --jpeg 85 -S 20 teste.jpg")
     image = cv2.imread('teste.jpg')
     output = predict(image, net)
@@ -44,43 +44,58 @@ def capture_predict():
     cv2.imshow("Output", output)
     cv2.waitKey(0)
 
+def round_msecs(msecs):
+    return min(9, msecs//500)
+
+def forward(msecs):
+    arduin_com.write('1')
+    arduin_com.write(str(round_msecs(msecs)))
+
+def turn_right(msecs):
+    arduin_com.write('2')
+    arduin_com.write(str(round_msecs(msecs)))
+
+def turn_left(msecs):
+    arduin_com.write('3')
+    arduin_com.write(str(round_msecs(msecs)))
+
+def backward(msecs):
+    arduin_com.write('4')
+    arduin_com.write(str(round_msecs(msecs)))
+
+def beep(times):
+    arduin_com.write('5')
+    arduin_com.write(times)
+
 def receive(rcv_socket):
     data = rcv_socket.recv(2048)
     cmd = list(str(data.decode('utf-8')).lower())
     cmd = ''.join([c for c in cmd if c != '\x00'])
     print (cmd)
-    if cmd == 'va para frente':
-	arduin_com.write('1')
-	arduin_com.write('4')
+    if cmd == 'taca-le pau' or cmd == 'taca-lhe pau':
+        forward(500)
     elif cmd == 'vire para direita':
-	arduin_com.write('2')
-	arduin_com.write('2')
+    	turn_right(1000)
     elif cmd == 'vire para esquerda':
-	arduin_com.write('3')
-	arduin_com.write('2')
+	turn_left(1000)
     elif cmd == 'va para tras':
-	arduin_com.write('4')
-	arduin_com.write('2')
+   	backward(1000)
     elif cmd == 'faca barulho':
-        arduin_com.write('5')
-	arduin_com.write('3')
+        beep(3)
     elif cmd == 'mostre todas as funcionalidades':
-        arduin_com.write('1')
-	arduin_com.write('2')
-        arduin_com.write('2')
-	arduin_com.write('2')
-        arduin_com.write('3')
-	arduin_com.write('2')
-        arduin_com.write('4')
-	arduin_com.write('2')
-        arduin_com.write('5')
-	arduin_com.write('3')
+        forward(1000)
+	turn_left(1000)
+	turn_right(1000)
+	backward(1000)
+        beep(3)
     rcv_socket.send('ack'.encode(encoding='utf-8', errors='ignore'))
     rcv_socket.close()
 
 my_socket = socket(AF_INET,SOCK_STREAM)
 my_socket.bind(('',socket_num))
 my_socket.listen(1)
+
+capture_predict()
 
 while True:
     rcv_socket, addr = my_socket.accept()
