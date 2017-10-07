@@ -52,6 +52,7 @@ socket_num = 3000
 arduin_com = serial.Serial('/dev/ttyACM0', 9600)
 msecs_per_degree = 1
 msecs_per_unit = 10
+#log = open('report.log', 'w')
 
 def predict(image, net, obj):
     h, w = image.shape[:2]
@@ -60,9 +61,11 @@ def predict(image, net, obj):
     detections = net.forward()
     for i in np.arange(0, detections.shape[2]):
         confidence = detections[0, 0, i, 2]
-        if confidence > 0.3:
+        if confidence > 0.5:
             idx = int(detections[0, 0, i, 1])
-            if classes[idx] == obj:
+            if idx >= len(classes):
+		continue
+	    if classes[idx] == obj:
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 coords = list(box.astype('int')) # Xi, Yi, Xf, Yf
                 for j in range(0, 4):
@@ -78,6 +81,7 @@ def capture_predict(obj):
 
 def arduino_move(action, msecs):
     units = int(round(float(msecs) / msecs_per_unit))
+    print arduino_cmds[action], units
     while units > 0:
         arduin_com.write(arduino_cmds[action] + str(min(9, units-1)))
         units -= min(10, units)
@@ -91,6 +95,7 @@ def arduino_goto_obj():
 
 # rotate 300ms right per frame (3900ms = ~360dg)
 def search(obj):
+    arduino_beep(2)
     bounding_box = False
     for i in range(0, 13):
         bounding_box = capture_predict(obj)
@@ -107,30 +112,34 @@ def receive(rcv_socket):
     cmd = list(str(data.decode('utf-8')).lower())
     cmd = ''.join([c for c in cmd if c != '\x00'])
     words = cmd.split(' ')
-    if len(words) > 1 and any(word in words for word in [ 'pegue', 'encontre', 'ache', 'procure' ]):
+    if len(words) > 1 and any(word in words for word in [ 'cade', 'pegue', 'encontre', 'ache', 'procure' ]):
         obj = words[2 if len(words) >= 3 else 1]
         if obj in objects:
             search(objects[obj])
-    elif cmd in [ 'va para frente', 'siga em frente', 'va reto', 'va em frente' ]:
+    elif cmd in [ 'va para frente', 'siga em frente', 'va reto', 'va em frente', 'taca-le pau', 'taca-lhe pau', 'tacale pau' ]:
         arduino_move('forward', 3000)
     elif cmd in [ 'vire para direita', 'vire para a direita' ]:
      	arduino_move('turn_right', 1900)
     elif cmd in [ 'vire para esquerda', 'vire para a esquerda' ]:
         arduino_move('turn_left', 1900)
     elif cmd in [ 'va para tras', 'volte', 'recue', 'volte atras' ]:
+        print 'backward'
         arduino_move('backward', 2500)
-    elif cmd in [ 'faca barulho', 'apite', 'alerte' ]:
+    elif cmd in [ 'faca barulho', 'apite', 'alerte', 'grite', 'seja insuportavel' ]:
         arduino_beep(3)
-    elif cmd in [ 'mostre todas as funcionalidades', 'se apresente', 'se exiba', 'mostre tudo o que sabe fazer' ]:
+    elif cmd in [ 'mostre todas as funcionalidades', 'se apresente', 'se exiba', 'mostre tudo o que sabe fazer', 'mostre quem e o bonzao', 'ulte', 'solte o ultimate', 'aperta o r', 'aperta o q', 'aperta esse errre', 'aperta esse r' ]:
         arduino_move('forward', 3000)
         arduino_move('turn_left', 1900)
         arduino_move('turn_right', 1900)
         arduino_move('backward', 2500)
         arduino_beep(3)
-    elif cmd in [ 'rode', 'fique tonto' ]:
-        arduino_move('turn_right', 7800)
-    elif cmd in [ 'ande ate nao dar mais', 'va para frente ate ser bloqueado', 'va pra frente ate ser bloqueado' ]:
+    elif cmd in [ 'corre berg', 'ande ate nao dar mais', 'va para frente ate ser bloqueado', 'va pra frente ate ser bloqueado', 'ao infinito e alem' ]:
         arduino_goto_obj()
+    elif cmd in [ 'desativar', 'desligar' ]:
+        arduino_beep(1)
+	#log.close()
+        time.sleep(1)
+        os.system('sudo shutdown -h 0')
     rcv_socket.send('ack'.encode(encoding='utf-8', errors='ignore'))
     rcv_socket.close()
 
