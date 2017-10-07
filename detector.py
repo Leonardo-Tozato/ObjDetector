@@ -1,3 +1,4 @@
+
 from PIL import Image
 from socket import *
 import numpy as np
@@ -5,6 +6,7 @@ import threading
 import argparse
 import serial
 import time
+import sys
 import cv2
 import os
 
@@ -50,28 +52,32 @@ arduino_cmds = {
 colors = np.random.uniform(0, 255, size=(len(classes), 3))
 socket_num = 3000
 arduin_com = serial.Serial('/dev/ttyACM0', 9600)
-msecs_per_degree = 1
+msecs_per_pixel_lft = 1.7
+msecs_per_pixel_rgt = 2
 msecs_per_unit = 10
 
 def log(message):
-    log_file = open('report.log', 'a')
+    log_file = open('/home/pi/Robotics/ObjDetector/report.log', 'a')
     log_file.write(message+'\n')
     log_file.close()
-
+    
 def predict(image, net, obj):
     h, w = image.shape[:2]
+    print h, w
     blob = cv2.dnn.blobFromImage(cv2.resize(image, (300, 300)), 0.007843, (300, 300), 127.5)
     log('starting predict')
     net.setInput(blob)
     detections = net.forward()
+    log('starting to search indexes: ' + str(detections.shape[2]) + ' of them')
     for i in np.arange(0, detections.shape[2]):
-        confidence = detections[0, 0, i, 2]
+        log('index ' + str(i))
+	confidence = detections[0, 0, i, 2]
         if confidence > 0.5:
             idx = int(detections[0, 0, i, 1])
             if idx >= len(classes):
                 log('[ERROR] index error on predict')
                 continue
-        if classes[idx] == obj:
+            if classes[idx] == obj:
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 coords = list(box.astype('int')) # Xi, Yi, Xf, Yf
                 for j in range(0, 4):
@@ -80,25 +86,30 @@ def predict(image, net, obj):
     return False
 
 def capture_predict(obj):
-    net = cv2.dnn.readNetFromCaffe('MobileNetSSD_deploy.prototxt', 'MobileNetSSD_deploy.caffemodel')
+    net = cv2.dnn.readNetFromCaffe('/home/pi/Robotics/ObjDetector/MobileNetSSD_deploy.prototxt', '/home/pi/Robotics/ObjDetector/MobileNetSSD_deploy.caffemodel')
     log('taking photo')
-    os.system('fswebcam -r 299x299 --jpeg 85 -S 10 -q teste.jpg')
-    image = cv2.imread('teste.jpg')
+    os.system('fswebcam -r 299x299 --jpeg 85 -S 10 -q /home/pi/Robotics/ObjDetector/teste.jpg')
+    image = cv2.imread('/home/pi/Robotics/ObjDetector/teste.jpg')
     return predict(image, net, obj)
 
 def arduino_move(action, msecs):
     units = int(round(float(msecs) / msecs_per_unit))
-    print arduino_cmds[action], units
     while units > 0:
         arduin_com.write(arduino_cmds[action] + str(min(9, units-1)))
         units -= min(10, units)
-    time.sleep((msecs * 1.2) / 1000.0)
+    time.sleep((msecs * 1.05) / 1000.0)
 
 def arduino_beep(times):
     arduin_com.write('5' + str(min(9, max(0, times-1))))
 
-def arduino_goto_obj():
+def arduino_run():
     arduin_com.write('6')
+
+def centralize(bounding_box):
+    diff = 150 - (bounding_box[0] + bounding_box[2]) // 2
+    action = 'turn_right' if diff < 0 else 'turn_left'
+    msecs = abs(diff) * (msecs_per_pixel_lft if action == 'turn_left' else msecs_per_pixel_rgt)
+    arduino_move(action, msecs)
 
 # rotate 300ms right per frame (3900ms = ~360dg)
 def search(obj):
@@ -112,10 +123,17 @@ def search(obj):
             break
         arduino_move('turn_right', 300)
     if bounding_box:
-        arduino_beep(3)
+        arduino_beep(2)
+        centralize(bounding_box)
+	arduino_run()
     else:
         arduino_beep(1)
     log('finished searching for ' + obj)
+
+def panoramic():
+    for i in range(0, 13):
+	os.system('fswebcam -r 299x299 --jpeg 85 -S 10 -q img' + str(i+1) + '.jpg')
+	arduino_move('turn_right', 300)
 
 def receive(rcv_socket):
     data = rcv_socket.recv(2048)
@@ -145,29 +163,43 @@ def receive(rcv_socket):
         arduino_move('backward', 2500)
         arduino_beep(3)
     elif cmd in [ 'corre berg', 'ande ate nao dar mais', 'va para frente ate ser bloqueado', 'va pra frente ate ser bloqueado', 'ao infinito e alem' ]:
-        arduino_goto_obj()
-    elif cmd in [ 'desativar', 'desligar' ]:
+        arduino_run()
+    elif cmd in [ 'morre diabo', 'desativar', 'desligar' ]:
         arduino_beep(1)
         time.sleep(1)
         os.system('sudo shutdown -h 0')
+    elif cmd in [ 'reinicie o sistema', 'reinicie' ]:
+	arduino_beep(1)
+	time.sleep(1)
+	os.system('sudo reboot')
     rcv_socket.send('ack'.encode(encoding='utf-8', errors='ignore'))
     rcv_socket.close()
 
-'''
-for i in range(0, 13):
-    #os.system('fswebcam -r 299x299 --jpeg 85 -S 10 -q img' + str(i) + '.jpg')
-    #arduino_move('turn_right', 300)
-'''
+def wait_cmd(my_socket):
+    while True:
+	rcv_socket, addr = my_socket.accept()
+	new_thread = threading.Thread(target=receive, args=(rcv_socket,))
+	new_thread.start()
+    my_socket.close()
 
-my_socket = socket(AF_INET,SOCK_STREAM)
-my_socket.bind(('',socket_num))
-my_socket.listen(1)
+def init():
+    my_socket = socket(AF_INET,SOCK_STREAM)
+    my_socket.bind(('',socket_num))
+    my_socket.listen(1)
+    time.sleep(2)
+    arduino_beep(2)
+    wait_cmd(my_socket)
 
-time.sleep(2)
-arduino_beep(2)
+init()
 
-while True:
-    rcv_socket, addr = my_socket.accept()
-    new_thread = threading.Thread(target=receive, args=(rcv_socket,))
-    new_thread.start()
-my_socket.close()
+def test_centralize():
+	res = capture_predict('person')
+	if res:
+		centralize(res)
+		res = capture_predict('person')
+		if res:
+			print (res[0] + res[2]) // 2
+		else:
+			print 'fail second'
+	else:
+		print 'fail'
