@@ -63,31 +63,32 @@ def log(message):
     
 def predict(image, net, obj):
     h, w = image.shape[:2]
-    print h, w
     blob = cv2.dnn.blobFromImage(cv2.resize(image, (300, 300)), 0.007843, (300, 300), 127.5)
-    log('starting predict')
+    log('[NET] Starting predict')
     net.setInput(blob)
     detections = net.forward()
-    log('starting to search indexes: ' + str(detections.shape[2]) + ' of them')
+    log('[NET RESULTS] Starting to verify results: ' + str(detections.shape[2]) + ' of them')
     for i in np.arange(0, detections.shape[2]):
-        log('index ' + str(i))
+        log('[NET RESULTS] Verifying result of index: ' + str(i))
 	confidence = detections[0, 0, i, 2]
         if confidence > 0.5:
             idx = int(detections[0, 0, i, 1])
             if idx >= len(classes):
-                log('[ERROR] index error on predict')
+                log('[ERROR] Index error on predict')
                 continue
             if classes[idx] == obj:
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 coords = list(box.astype('int')) # Xi, Yi, Xf, Yf
                 for j in range(0, 4):
                     coords[j] = max(0, min(300, coords[j]))
+                log('[NET RESULTS] Object found at ' + str(coords))
                 return coords
+    log('[NET RESULTS] Object not found')
     return False
 
 def capture_predict(obj):
     net = cv2.dnn.readNetFromCaffe('/home/pi/Robotics/ObjDetector/MobileNetSSD_deploy.prototxt', '/home/pi/Robotics/ObjDetector/MobileNetSSD_deploy.caffemodel')
-    log('taking photo')
+    log('[WEBCAM] Taking photo')
     os.system('fswebcam -r 299x299 --jpeg 85 -S 10 -q /home/pi/Robotics/ObjDetector/teste.jpg')
     image = cv2.imread('/home/pi/Robotics/ObjDetector/teste.jpg')
     return predict(image, net, obj)
@@ -113,12 +114,11 @@ def centralize(bounding_box):
 
 # rotate 300ms right per frame (3900ms = ~360dg)
 def search(obj):
-    log('searching for ' + obj)
+    log('[SEARCH] Searching for ' + obj)
     arduino_beep(2)
     bounding_box = False
     for i in range(0, 13):
         bounding_box = capture_predict(obj)
-        log('predict result: ' + str(bounding_box))
         if bounding_box:
             break
         arduino_move('turn_right', 300)
@@ -128,7 +128,7 @@ def search(obj):
 	arduino_run()
     else:
         arduino_beep(1)
-    log('finished searching for ' + obj)
+    log('[SEARCH] Finished searching for ' + obj)
 
 def panoramic():
     for i in range(0, 13):
@@ -140,7 +140,7 @@ def receive(rcv_socket):
     cmd = list(str(data.decode('utf-8')).lower())
     cmd = ''.join([c for c in cmd if c != '\x00'])
     words = cmd.split(' ')
-    log('received cmd: ' + cmd)
+    log('[COMMAND] Received cmd: ' + cmd)
     if len(words) > 1 and any(word in words for word in [ 'cade', 'pegue', 'encontre', 'ache', 'procure' ]):
         obj = words[2 if len(words) >= 3 else 1]
         if obj in objects:
