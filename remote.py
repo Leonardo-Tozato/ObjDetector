@@ -50,7 +50,7 @@ arduino_cmds = {
 }
 
 colors = np.random.uniform(0, 255, size=(len(classes), 3))
-socket_num = 3000
+socket_num = 3010
 arduin_com = serial.Serial('/dev/ttyACM0', 9600)
 msecs_per_pixel_lft = 1.5
 msecs_per_pixel_rgt = 1.7
@@ -145,14 +145,14 @@ def receive(rcv_socket):
         obj = words[2 if len(words) >= 3 else 1]
         if obj in objects:
             search(objects[obj])
-    elif cmd in [ 'va para frente', 'siga em frente', 'va reto', 'va em frente', 'taca-le pau', 'taca-lhe pau', 'tacale pau' ]:
-        arduino_move('forward', 3000)
-    elif cmd in [ 'vire para direita', 'vire para a direita' ]:
-        arduino_move('turn_right', 1900)
-    elif cmd in [ 'vire para esquerda', 'vire para a esquerda' ]:
-        arduino_move('turn_left', 1900)
-    elif cmd in [ 'va para tras', 'volte', 'recue', 'volte atras' ]:
-        arduino_move('backward', 2500)
+    elif cmd in [ 'frente', 'va para frente', 'siga em frente', 'va reto', 'va em frente', 'taca-le pau', 'taca-lhe pau', 'tacale pau' ]:
+        arduino_move('forward', 20)
+    elif cmd in [ 'direita', 'vire para direita', 'vire para a direita' ]:
+        arduino_move('turn_right', 20)
+    elif cmd in [ 'esquerda', 'vire para esquerda', 'vire para a esquerda' ]:
+        arduino_move('turn_left', 20)
+    elif cmd in [ 'tras', 'va para tras', 'volte', 'recue', 'volte atras' ]:
+        arduino_move('backward', 20)
     elif cmd in [ 'faca barulho', 'apite', 'alerte', 'grite', 'seja insuportavel' ]:
         arduino_beep(3)
     elif cmd in [ 'mostre todas as funcionalidades', 'se apresente', 'se exiba', 'mostre tudo o que sabe fazer', 'mostre quem e o bonzao', 'ulte', 'solte o ultimate', 'aperta o r', 'aperta o q', 'aperta esse errre', 'aperta esse r' ]:
