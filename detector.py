@@ -52,11 +52,16 @@ socket_num = 3000
 arduin_com = serial.Serial('/dev/ttyACM0', 9600)
 msecs_per_degree = 1
 msecs_per_unit = 10
-#log = open('report.log', 'w')
+
+def log(message):
+    log_file = open('report.log', 'a')
+    log_file.write(message+'\n')
+    log_file.close()
 
 def predict(image, net, obj):
     h, w = image.shape[:2]
     blob = cv2.dnn.blobFromImage(cv2.resize(image, (300, 300)), 0.007843, (300, 300), 127.5)
+    log('starting predict')
     net.setInput(blob)
     detections = net.forward()
     for i in np.arange(0, detections.shape[2]):
@@ -64,8 +69,9 @@ def predict(image, net, obj):
         if confidence > 0.5:
             idx = int(detections[0, 0, i, 1])
             if idx >= len(classes):
-		continue
-	    if classes[idx] == obj:
+                log('[ERROR] index error on predict')
+                continue
+        if classes[idx] == obj:
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 coords = list(box.astype('int')) # Xi, Yi, Xf, Yf
                 for j in range(0, 4):
@@ -75,6 +81,7 @@ def predict(image, net, obj):
 
 def capture_predict(obj):
     net = cv2.dnn.readNetFromCaffe('MobileNetSSD_deploy.prototxt', 'MobileNetSSD_deploy.caffemodel')
+    log('taking photo')
     os.system('fswebcam -r 299x299 --jpeg 85 -S 10 -q teste.jpg')
     image = cv2.imread('teste.jpg')
     return predict(image, net, obj)
@@ -95,10 +102,12 @@ def arduino_goto_obj():
 
 # rotate 300ms right per frame (3900ms = ~360dg)
 def search(obj):
+    log('searching for ' + obj)
     arduino_beep(2)
     bounding_box = False
     for i in range(0, 13):
         bounding_box = capture_predict(obj)
+        log('predict result: ' + str(bounding_box))
         if bounding_box:
             break
         arduino_move('turn_right', 300)
@@ -106,12 +115,14 @@ def search(obj):
         arduino_beep(3)
     else:
         arduino_beep(1)
+    log('finished searching for ' + obj)
 
 def receive(rcv_socket):
     data = rcv_socket.recv(2048)
     cmd = list(str(data.decode('utf-8')).lower())
     cmd = ''.join([c for c in cmd if c != '\x00'])
     words = cmd.split(' ')
+    log('received cmd: ' + cmd)
     if len(words) > 1 and any(word in words for word in [ 'cade', 'pegue', 'encontre', 'ache', 'procure' ]):
         obj = words[2 if len(words) >= 3 else 1]
         if obj in objects:
@@ -119,7 +130,7 @@ def receive(rcv_socket):
     elif cmd in [ 'va para frente', 'siga em frente', 'va reto', 'va em frente', 'taca-le pau', 'taca-lhe pau', 'tacale pau' ]:
         arduino_move('forward', 3000)
     elif cmd in [ 'vire para direita', 'vire para a direita' ]:
-     	arduino_move('turn_right', 1900)
+        arduino_move('turn_right', 1900)
     elif cmd in [ 'vire para esquerda', 'vire para a esquerda' ]:
         arduino_move('turn_left', 1900)
     elif cmd in [ 'va para tras', 'volte', 'recue', 'volte atras' ]:
@@ -137,7 +148,6 @@ def receive(rcv_socket):
         arduino_goto_obj()
     elif cmd in [ 'desativar', 'desligar' ]:
         arduino_beep(1)
-	#log.close()
         time.sleep(1)
         os.system('sudo shutdown -h 0')
     rcv_socket.send('ack'.encode(encoding='utf-8', errors='ignore'))
